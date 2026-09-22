@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 # --- Configuración de la Base de Datos SQLite ---
-DB_NAME = "examenes.db" #se guarda el nombre del archivo en una variable
+DB_NAME = "examenes.db" # se guarda el nombre del archivo en una variable
 
 def inicializar_base_de_datos():
     """Crea la tabla de estudiantes si no existe."""
@@ -94,7 +94,7 @@ class FormularioEstudiante(tk.Toplevel):
         self.geometry("550x680+100+0")
         self.configure(bg=self.color_fondo_ventana_datos)
         self.transient(parent) # Hace que esta ventana dependa de la principal
-        self.iconbitmap("PROAico.ico")
+        self.iconbitmap("assets/PROAico.ico")
 
         # --- Variables de control ---
         self.qr_generado_path = None
@@ -112,8 +112,8 @@ class FormularioEstudiante(tk.Toplevel):
         self.crear_campo(frame_form, "Curso:", "curso_entry")
         self.crear_campo(frame_form, "Aula Asignada (EJ: A-01):", "aula_entry")
 
-        # Imagen en botón para generar QR
-        img_guardar = Image.open("guardar.png")
+        # Imagen en botón para generar QR (Ruta adaptada a assets)
+        img_guardar = Image.open("assets/guardar.png")
         img_guardar = img_guardar.resize((30, 30))
         self.img_guardar = ImageTk.PhotoImage(img_guardar)
 
@@ -136,8 +136,8 @@ class FormularioEstudiante(tk.Toplevel):
         self.lbl_qr_preview = tk.Label(self, text="El QR generado aparecerá aquí", bg="#a6ccfc", width=50, height=15, relief="solid", bd=2)
         self.lbl_qr_preview.pack(pady=10)
 
-        # imagen de compartir/guardar QR
-        img_compartir = Image.open("compartir.png")
+        # Imagen de compartir/guardar QR (Ruta adaptada a assets)
+        img_compartir = Image.open("assets/compartir.png")
         img_compartir = img_compartir.resize((30, 30))
         self.img_compartir = ImageTk.PhotoImage(img_compartir)
         
@@ -249,7 +249,7 @@ class BuscadorAulaApp(tk.Toplevel):
         self.geometry("700x650+100+0")
         self.resizable(False, False)
         self.configure(bg=self.color_fondo_ventana_escaner)
-        self.iconbitmap("PROAico.ico")
+        self.iconbitmap("assets/PROAico.ico")
         self.transient(parent)
         self.grab_set()
 
@@ -388,7 +388,7 @@ class MenuPrincipal:
         self.ventana.geometry("700x500+100+0")
         self.ventana.configure(bg=color_fondo)
         self.ventana.resizable(False, False)
-        self.ventana.iconbitmap("PROAico.ico")
+        self.ventana.iconbitmap("assets/PROAico.ico")
 
         # --- Título principal ---
         self.lbl_titulo = tk.Label(
@@ -400,16 +400,16 @@ class MenuPrincipal:
         )
         self.lbl_titulo.pack(pady=20)
 
-        # --- Contenedor de Botones (con la estética de la imagen) ---
-        frame_botones = tk.Frame(ventana, bg=color_fondo, borderwidth=3, relief="groove",pady=20)
+        # --- Contenedor de Botones ---
+        frame_botones = tk.Frame(ventana, bg=color_fondo, borderwidth=3, relief="groove", pady=20)
         frame_botones.pack(pady=10)
 
-        # Imágenes de los botones
-        self.img_boton1 = Image.open("nuevo_estudiante.png")
+        # Imágenes de los botones (Rutas adaptadas a assets)
+        self.img_boton1 = Image.open("assets/nuevo_estudiante.png")
         self.img_boton1 = self.img_boton1.resize((100, 100))
         self.img_boton1 = ImageTk.PhotoImage(self.img_boton1)
         
-        self.img_boton2 = Image.open("codigo_qr.png")
+        self.img_boton2 = Image.open("assets/codigo_qr.png")
         self.img_boton2 = self.img_boton2.resize((100, 100))
         self.img_boton2 = ImageTk.PhotoImage(self.img_boton2)
         
@@ -434,7 +434,7 @@ class MenuPrincipal:
             frame_botones, 
             text="Abrir Escáner\nde Aula", 
             font=("Arial", 14, "bold", "italic"),
-            bg="#c29e28", # Naramja
+            bg="#c29e28", # Naranja
             fg="white",
             command=self.abrir_escaner,
             image=self.img_boton2,
@@ -447,8 +447,8 @@ class MenuPrincipal:
         )
         self.btn_2.pack(side="left", padx=25)
     
-        #---- Logo de la Institución ----#
-        img_logo = Image.open("PROA LOGO1.png")
+        # ---- Logo de la Institución (Ruta adaptada a assets) ---- #
+        img_logo = Image.open("assets/PROA LOGO1.png")
         img_logo = img_logo.resize((150, 150))
         img_logo = ImageTk.PhotoImage(img_logo)
         self.lbl_logo = tk.Label(ventana, image=img_logo, bg=color_fondo)
