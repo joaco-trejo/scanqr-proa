@@ -1,0 +1,14 @@
+# Base de datos local (contiene datos personales de alumnos)
+examenes.db
+
+# Carpeta con las imágenes de códigos QR generadas
+qrcodes/
+
+# Archivos temporales y de caché de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Configuración de entorno de desarrollo e IDEs
+.vscode/
+.idea/
