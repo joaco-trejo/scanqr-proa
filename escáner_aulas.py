@@ -175,15 +175,18 @@ class FormularioEstudiante(tk.Toplevel):
 
     def crear_campo(self, parent, label_text, entry_name):
         """Helper para crear campos de entrada etiquetados."""
-        frame = tk.Frame(parent, bg=self.color_fondo_ventana_datos)
-        frame.pack(fill="x", pady=5)
+        frame = tk.Frame(parent, bg=COLOR_TARJETA)
+        frame.pack(fill="x", pady=4)
         
-        lbl = tk.Label(frame, text=label_text, font=("Arial", 10,"bold","italic"), bg=self.color_fondo_ventana_datos, width=25, anchor="e")
+        lbl = tk.Label(frame, text=label_text, font=("Arial", 9,"bold","italic"), bg=COLOR_TARJETA, fg=COLOR_TEXTO, width=22, anchor="w")
         lbl.pack(side="left")
         
-        entry = tk.Entry(frame, font=("Arial", 10))
+        entry = tk.Entry(frame, font=("Arial", 10), bg="#FAFAFA", 
+        fg=COLOR_TEXTO, relief="solid", bd=1)
+
         entry.pack(side="left", fill="x", expand=True)
-        # Guardamos la referencia de la entrada dinámicamente en la clase
+
+        # Se guarda la referencia de la entrada dinámicamente en la clase
         setattr(self, entry_name, entry)
 
     def procesar_datos(self):
@@ -256,16 +259,16 @@ class FormularioEstudiante(tk.Toplevel):
                 messagebox.showinfo("Copia Guardada", "Se ha guardado una copia del QR.")
 
 class BuscadorAulaApp(tk.Toplevel):
-    """Ventana del escáner (Adaptada para leer QR estructurado)."""
     def __init__(self, parent):
         super().__init__(parent)
-        self.color_fondo_ventana_escaner = "#9bb5f8"
+        self.configure(bg=COLOR_FONDO)
         self.title("Control de Exámenes - Escáner de Aulas")
-        self.geometry("700x650+100+0")
+        self.geometry("680x640+100+0")
         self.resizable(False, False)
-        self.configure(bg=self.color_fondo_ventana_escaner)
         self.iconbitmap("assets/PROAico.ico")
         self.transient(parent)
+        frame_camara = tk.Frame(self, bg=COLOR_TEXTO, bd=2, relief="solid")
+        frame_camara.pack(pady=5)
         self.grab_set()
 
         # --- UI - Título principal ---
@@ -273,20 +276,20 @@ class BuscadorAulaApp(tk.Toplevel):
             self, 
             text="Escanee su código QR de examen", 
             font=("Arial", 16, "bold"), 
-            bg=self.color_fondo_ventana_escaner, 
+            bg=COLOR_FONDO, 
             fg="#333333"
         )
         self.lbl_titulo.pack(pady=15)
 
         # --- UI - Feed de cámara ---
-        self.lbl_video = tk.Label(self, bg="black", width=350, height=290)
-        self.lbl_video.pack(pady=10)
+        self.lbl_video = tk.Label(frame_camara, bg="black", width=360, height=270)
+        self.lbl_video.pack()
 
         # --- UI - Resultado Detallado ---
-        frame_resultados = tk.LabelFrame(self, text=" Datos Detectados ", font=("Arial", 11, "bold"), bg=self.color_fondo_ventana_escaner, pady=10, padx=10)
+        frame_resultados = tk.LabelFrame(self, text=" Datos Detectados ", font=("Arial", 11, "bold"), bg=COLOR_FONDO, pady=10, padx=10)
         frame_resultados.pack(pady=10, padx=20, fill="x")
 
-        self.lbl_estudiante = tk.Label(frame_resultados, text="Esperando lectura...", font=("Arial", 12), bg=self.color_fondo_ventana_escaner, anchor="w")
+        self.lbl_estudiante = tk.Label(frame_resultados, text="Esperando lectura...", font=("Arial", 12), bg=COLOR_FONDO, anchor="w")
         self.lbl_estudiante.pack(fill="x")
 
         # Resultado principal del Aula (grande y claro)
@@ -294,7 +297,7 @@ class BuscadorAulaApp(tk.Toplevel):
             self, 
             text="AULA: --", 
             font=("Arial", 22, "bold"), 
-            bg=self.color_fondo_ventana_escaner, 
+            bg=COLOR_FONDO, 
             fg="#4a5568",
             width=30,
             height=2,
@@ -345,33 +348,31 @@ class BuscadorAulaApp(tk.Toplevel):
         self.ventana_bucle = self.after(15, self.actualizar_camara)
 
     def mostrar_resultado_estructurado(self, contenido_qr_raw):
-        """Parsea el JSON del QR y actualiza la UI."""
         self.escaneo_activo = False
         
         try:
-            # 1. Intentamos parsear el contenido como JSON
             datos = json.loads(contenido_qr_raw)
-            
-            # 2. Extraemos los campos que definimos en la generación
             nombre_completo = datos.get("nombre_completo", "Desconocido")
             dni = datos.get("dni", "--")
             aula = datos.get("aula", "NO ASIGNADA")
 
-            # 3. Actualizamos la UI
-            self.lbl_estudiante.configure(text=f"Estudiante: {nombre_completo}\nDNI: {dni}")
+            self.lbl_estudiante.configure(text=f"Estudiante: {nombre_completo} | DNI: {dni}")
+            
+            # CAMBIO: Aplicar variables globales de éxito
             self.lbl_aula.configure(
-                text=f"AULA ASIGNADA:\n{aula}", 
-                bg="#c6f6d5", # Verde suave
-                fg="#22543d"
+                text=f"AULA ASIGNADA: {aula}", 
+                bg=COLOR_EXITO_BG, 
+                fg=COLOR_EXITO_FG
             )
             
         except json.JSONDecodeError:
-            # El QR no contiene datos válidos para este sistema
-            self.lbl_estudiante.configure(text="Error de Lectura:")
+            self.lbl_estudiante.configure(text="Resultado de Lectura: Formato no reconocido.")
+            
+            # CAMBIO: Aplicar variables globales de error
             self.lbl_aula.configure(
-                text=f"CÓDIGO QR NO VÁLIDO\nO CORRUPTO",
-                bg="#fed7d7", # Rojo suave
-                fg="#822727"
+                text="CÓDIGO QR NO VÁLIDO",
+                bg=COLOR_ERROR_BG, 
+                fg=COLOR_ERROR_FG
             )
         
         self.btn_reiniciar.pack(pady=5)
@@ -399,9 +400,9 @@ class MenuPrincipal:
     def __init__(self, ventana):
         self.ventana = ventana
         color_fondo = "#b7d0f7"
-        self.ventana.title("Panel de Control de Exámenes - Gestión Integral")
+        self.ventana.title("Sistema ProA - Control de Exámenes y Aulas")
         self.ventana.geometry("700x500+100+0")
-        self.ventana.configure(bg=color_fondo)
+        self.ventana.configure(bg=COLOR_FONDO)
         self.ventana.resizable(False, False)
         self.ventana.iconbitmap("assets/PROAico.ico")
 
@@ -410,63 +411,60 @@ class MenuPrincipal:
             ventana, 
             text="PANEL DE CONTROL (Exámenes y Aulas)", 
             font=("Candara", 20, "bold"), 
-            bg=color_fondo, 
-            fg="#7D0606"
+            bg=COLOR_FONDO, 
+            fg=COLOR_AZUL_PROA
         )
-        self.lbl_titulo.pack(pady=20)
+        self.lbl_titulo.pack(pady=18)
 
         # --- Contenedor de Botones ---
-        frame_botones = tk.Frame(ventana, bg=color_fondo, borderwidth=3, relief="groove", pady=20)
-        frame_botones.pack(pady=10)
+        frame_tarjeta = tk.Frame(ventana, bg=COLOR_TARJETA, bd=1, relief="solid", pady=20, padx=20)
+        frame_tarjeta.pack(pady=5, padx=20)
 
         # Imágenes de los botones (Rutas adaptadas a assets)
-        self.img_boton1 = Image.open("assets/nuevo_estudiante.png")
-        self.img_boton1 = self.img_boton1.resize((100, 100))
-        self.img_boton1 = ImageTk.PhotoImage(self.img_boton1)
-        
-        self.img_boton2 = Image.open("assets/codigo_qr.png")
-        self.img_boton2 = self.img_boton2.resize((100, 100))
-        self.img_boton2 = ImageTk.PhotoImage(self.img_boton2)
+        self.img_boton1 = ImageTk.PhotoImage(Image.open("assets/nuevo_estudiante.png").resize((85, 85)))
+        self.img_boton2 = ImageTk.PhotoImage(Image.open("assets/codigo_qr.png").resize((85, 85)))
         
         self.btn_1 = tk.Button(
-            frame_botones, 
-            text="Ingresar Nuevo Estudiante\n- Generar QR -", 
-            font=("Arial", 14, "bold", "italic"),
-            bg="#3182ce", # Azul
+            frame_tarjeta, 
+            text="Ingresar Nuevo Estudiante\n [Generar QR] ", 
+            font=("Arial", 12, "bold", "italic"),
+            bg=COLOR_AZUL_PROA,
             fg="white",
+            activebackground="#072A54",
+            activeforeground="white",
             command=self.abrir_formulario,
             image=self.img_boton1,
             compound=tk.TOP,
-            width=270,
-            height=160,
-            relief="raised",
-            bd=3,
+            width=260,
+            height=150,
+            bd=0,
             cursor="hand2"
         )
-        self.btn_1.pack(side="left", padx=25)
+        self.btn_1.pack(side="left", padx=15)
         
         self.btn_2 = tk.Button(
-            frame_botones, 
+            frame_tarjeta, 
             text="Abrir Escáner\nde Aula", 
-            font=("Arial", 14, "bold", "italic"),
-            bg="#c29e28", # Naranja
-            fg="white",
+            font=("Arial", 12, "bold", "italic"),
+            bg=COLOR_ROJO_PROA,
+            fg="white", 
+            activebackground="#C0161C",
+            activeforeground="white",
             command=self.abrir_escaner,
             image=self.img_boton2,
             compound=tk.TOP,
-            width=270,
-            height=160,
-            relief="raised",
-            bd=3,
+            width=260,
+            height=150,
+            bd=0,
             cursor="hand2"
         )
-        self.btn_2.pack(side="left", padx=25)
+        self.btn_2.pack(side="left", padx=15)
     
         # ---- Logo de la Institución (Ruta adaptada a assets) ---- #
         img_logo = Image.open("assets/PROA LOGO1.png")
         img_logo = img_logo.resize((150, 160))
         img_logo = ImageTk.PhotoImage(img_logo)
-        self.lbl_logo = tk.Label(ventana, image=img_logo, bg=color_fondo)
+        self.lbl_logo = tk.Label(ventana, image=img_logo, bg=COLOR_FONDO)
         self.lbl_logo.image = img_logo # Mantener referencia
         self.lbl_logo.pack(pady=10)
 
