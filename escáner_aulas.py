@@ -8,6 +8,22 @@ import json # Para estructurar los datos dentro del QR
 import os
 from datetime import datetime
 
+# ==========================================
+# PALETA DE COLORES UI/UX INSTITUCIONAL (PROA)
+# ==========================================
+COLOR_FONDO = "#F5F7FA"         # Lienzo general
+COLOR_TARJETA = "#FFFFFF"       # Contenedores y tarjetas elevadas
+COLOR_TEXTO = "#101820"         # Texto principal (Deep Navy)
+COLOR_AZUL_PROA = "#0A3B74"     # Azul oficial ProA
+COLOR_ROJO_PROA = "#E31B23"     # Rojo oficial ProA
+COLOR_BORDE = "#D0D7DE"         # Bordes sutiles
+
+# Estados de alerta para el escáner
+COLOR_EXITO_BG = "#D4EDDA"
+COLOR_EXITO_FG = "#155724"
+COLOR_ERROR_BG = "#F8D7DA"
+COLOR_ERROR_FG = "#721C24"
+
 # --- Configuración de la Base de Datos SQLite ---
 DB_NAME = "examenes.db" # se guarda el nombre del archivo en una variable
 
@@ -77,7 +93,7 @@ def generar_y_guardar_imagen_qr(datos_qr_text, dni):
     qr.add_data(datos_qr_text)
     qr.make(fit=True)
 
-    img = qr.make_image(fill_color="black", back_color="white")
+    img = qr.make_image(fill_color=COLOR_TEXTO, back_color="white")
     img.save(filename)
     
     return filename
@@ -91,8 +107,8 @@ class FormularioEstudiante(tk.Toplevel):
         super().__init__(parent)
         self.color_fondo_ventana_datos = "#9bb5f8"
         self.title("Ingresar Nuevo Estudiante - Generar QR")
-        self.geometry("550x680+100+0")
-        self.configure(bg=self.color_fondo_ventana_datos)
+        self.geometry("560x700+100+0")
+        self.configure(bg=COLOR_FONDO)
         self.transient(parent) # Hace que esta ventana dependa de la principal
         self.iconbitmap("assets/PROAico.ico")
 
@@ -100,9 +116,10 @@ class FormularioEstudiante(tk.Toplevel):
         self.qr_generado_path = None
 
         # --- UI - Formulario ---
-        
-        frame_form = tk.LabelFrame(self, text=" Datos del Estudiante ", font=("Arial", 11, "bold"), bg=self.color_fondo_ventana_datos, pady=10, padx=10)
-        frame_form.pack(pady=15, padx=15, fill="both")
+        frame_form = tk.LabelFrame(
+                    self, text=" Datos del Estudiante ", font=("Arial", 11, "bold"), 
+                    bg=COLOR_TARJETA, fg=COLOR_AZUL_PROA, bd=1, relief="solid", pady=10, padx=15)
+        frame_form.pack(pady=15, padx=20, fill="both", expand=True)
 
         self.crear_campo(frame_form, "DNI (Identificación):", "dni_entry")
         self.crear_campo(frame_form, "Nombre:", "nombre_entry")
@@ -119,17 +136,10 @@ class FormularioEstudiante(tk.Toplevel):
 
         # --- UI - Botones ---
         self.btn_guardar = tk.Button(
-            self, 
-            text="Guardar y Generar QR", 
-            font=("Arial", 12, "bold"),
-            bg="#c8930d", 
-            fg="white",
-            command=self.procesar_datos,
-            image=self.img_guardar,
-            compound=tk.LEFT,
-            padx=20,
-            pady=8
-        )
+            self, text=" Guardar y Generar QR", font=("Arial", 11, "bold"),bg=COLOR_ROJO_PROA, 
+            fg="white", activebackground="#C0161C", # Efecto al hacer clic
+            activeforeground="white", command=self.procesar_datos,image=self.img_guardar,compound=tk.LEFT,padx=15,pady=8,bd=0,cursor="hand2")
+        
         self.btn_guardar.pack(pady=10)
 
         # --- UI - Previsualización del QR ---
@@ -143,18 +153,23 @@ class FormularioEstudiante(tk.Toplevel):
         
         self.btn_compartir = tk.Button(
             self,
-            text="Compartir/Guardar Imagen QR",
-            font=("Arial", 10),
+            text=" Compartir / Guardar Imagen QR",
+            font=("Arial", 10, "bold"),
             command=self.compartir_qr,
             image=self.img_compartir,
             compound=tk.LEFT,
-            padx=10,
-            pady=5,
-            bg="#394590",
+            padx=12,
+            pady=6,
+            bg=COLOR_AZUL_PROA,
             fg="white",
-            state="disabled" # Deshabilitado hasta que se genere el QR
+            activebackground="#072A54",
+            activeforeground="white",
+            bd=0,
+            cursor="hand2",
+            state="disabled"
         )
-        self.btn_compartir.place(x=155, y=620) # Posición relativa dentro de la ventana
+        
+        self.btn_compartir.pack(pady=15) # Reemplaza a .place()
         
         self.grab_set() # Hace que esta ventana sea modal
 
@@ -449,7 +464,7 @@ class MenuPrincipal:
     
         # ---- Logo de la Institución (Ruta adaptada a assets) ---- #
         img_logo = Image.open("assets/PROA LOGO1.png")
-        img_logo = img_logo.resize((150, 150))
+        img_logo = img_logo.resize((150, 160))
         img_logo = ImageTk.PhotoImage(img_logo)
         self.lbl_logo = tk.Label(ventana, image=img_logo, bg=color_fondo)
         self.lbl_logo.image = img_logo # Mantener referencia
