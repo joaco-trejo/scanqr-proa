@@ -282,7 +282,7 @@ class BuscadorAulaApp(tk.Toplevel):
         self.lbl_titulo.pack(pady=15)
 
         # --- UI - Feed de cámara ---
-        self.lbl_video = tk.Label(frame_camara, bg="black", width=360, height=270)
+        self.lbl_video = tk.Label(frame_camara, bg="black", width=460, height=360)
         self.lbl_video.pack()
 
         # --- UI - Resultado Detallado ---
@@ -338,7 +338,7 @@ class BuscadorAulaApp(tk.Toplevel):
                 if data:
                     self.mostrar_resultado_estructurado(data)
 
-            frame_reducido = cv2.resize(frame, (350, 290))
+            frame_reducido = cv2.resize(frame, (460, 360))
             cv2image = cv2.cvtColor(frame_reducido, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(cv2image)
             imgtk = ImageTk.PhotoImage(image=img)
