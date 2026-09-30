@@ -14,7 +14,7 @@ from datetime import datetime
 COLOR_FONDO = "#F5F7FA"         # Lienzo general
 COLOR_TARJETA = "#FFFFFF"       # Contenedores y tarjetas elevadas
 COLOR_TEXTO = "#101820"         # Texto principal (Deep Navy)
-COLOR_AZUL_PROA = "#0A3B74"     # Azul oficial ProA
+COLOR_AZUL_PROA = "#022B5A"     # Azul oficial ProA
 COLOR_ROJO_PROA = "#E31B23"     # Rojo oficial ProA
 COLOR_BORDE = "#D0D7DE"         # Bordes sutiles
 
@@ -399,14 +399,14 @@ class BuscadorAulaApp(tk.Toplevel):
 class MenuPrincipal:
     def __init__(self, ventana):
         self.ventana = ventana
-        color_fondo = "#b7d0f7"
         self.ventana.title("Sistema ProA - Control de Exámenes y Aulas")
-        self.ventana.geometry("700x500+100+0")
+        # CAMBIO: Ancho ampliado a 920px para que entren las 4 tarjetas cómodamente
+        self.ventana.geometry("920x500+100+0")
         self.ventana.configure(bg=COLOR_FONDO)
         self.ventana.resizable(False, False)
         self.ventana.iconbitmap("assets/PROAico.ico")
 
-        # --- Título principal ---
+        # Título principal
         self.lbl_titulo = tk.Label(
             ventana, 
             text="PANEL DE CONTROL (Exámenes y Aulas)", 
@@ -414,20 +414,62 @@ class MenuPrincipal:
             bg=COLOR_FONDO, 
             fg=COLOR_AZUL_PROA
         )
-        self.lbl_titulo.pack(pady=18)
+        self.lbl_titulo.pack(pady=10)
 
-        # --- Contenedor de Botones ---
-        frame_tarjeta = tk.Frame(ventana, bg=COLOR_TARJETA, bd=1, relief="solid", pady=20, padx=20)
-        frame_tarjeta.pack(pady=5, padx=20)
+        # Contenedor principal de tarjetas
+        frame_tarjeta = tk.Frame(ventana, bg=COLOR_TARJETA, bd=1, relief="solid", pady=25, padx=15)
+        frame_tarjeta.pack(pady=8, padx=10)
 
-        # Imágenes de los botones (Rutas adaptadas a assets)
-        self.img_boton1 = ImageTk.PhotoImage(Image.open("assets/nuevo_estudiante.png").resize((85, 85)))
-        self.img_boton2 = ImageTk.PhotoImage(Image.open("assets/codigo_qr.png").resize((85, 85)))
-        
+        # Cargar imágenes reducidas a un tamaño uniforme (65x65)
+        self.img_boton1 = ImageTk.PhotoImage(Image.open("assets/nuevo_estudiante.png").resize((65, 65)))
+        self.img_boton2 = ImageTk.PhotoImage(Image.open("assets/codigo_qr.png").resize((65, 65)))
+        # Mantenemos las imágenes existentes como fallback visual si no tienes íconos específicos aún
+        self.img_excel = self.img_boton1  
+        self.img_lista = self.img_boton2  
+
+        # --- BOTÓN 1: Exportar Lista ---
+        self.btn_exportar = tk.Button(
+            frame_tarjeta, 
+            text="\nExportar Lista\na Excel / CSV", # '\n' crea el margen con la imagen
+            font=("Arial", 10, "bold"),
+            bg="#5B7065", # Tono oliva/verde institucional
+            fg="white",
+            activebackground="#46574E",
+            activeforeground="white",
+            command=self.exportar_excel,
+            image=self.img_excel,
+            compound=tk.TOP,
+            width=190,
+            height=140,
+            bd=0,
+            cursor="hand2"
+        )
+        self.btn_exportar.pack(side="left", padx=8)
+
+        # --- BOTÓN 2: Ver / Ordenar ---
+        self.btn_ver = tk.Button(
+            frame_tarjeta, 
+            text="\nVer / Ordenar\nEstudiantes", 
+            font=("Arial", 10, "bold"),
+            bg="#6C5B7B", # Tono púrpura/violeta
+            fg="white",
+            activebackground="#544661",
+            activeforeground="white",
+            command=self.ver_estudiantes,
+            image=self.img_lista,
+            compound=tk.TOP,
+            width=190,
+            height=140,
+            bd=0,
+            cursor="hand2"
+        )
+        self.btn_ver.pack(side="left", padx=8)
+
+        # --- BOTÓN 3: Nuevo Estudiante ---
         self.btn_1 = tk.Button(
             frame_tarjeta, 
-            text="Ingresar Nuevo Estudiante\n [Generar QR] ", 
-            font=("Arial", 12, "bold", "italic"),
+            text="\nNuevo Estudiante\n- Generar QR -", 
+            font=("Arial", 10, "bold"),
             bg=COLOR_AZUL_PROA,
             fg="white",
             activebackground="#072A54",
@@ -435,40 +477,43 @@ class MenuPrincipal:
             command=self.abrir_formulario,
             image=self.img_boton1,
             compound=tk.TOP,
-            width=260,
-            height=150,
+            width=190,
+            height=140,
             bd=0,
             cursor="hand2"
         )
-        self.btn_1.pack(side="left", padx=15)
+        self.btn_1.pack(side="left", padx=8)
         
+        # --- BOTÓN 4: Escáner ---
         self.btn_2 = tk.Button(
             frame_tarjeta, 
-            text="Abrir Escáner\nde Aula", 
-            font=("Arial", 12, "bold", "italic"),
-            bg=COLOR_ROJO_PROA,
+            text="\nAbrir Escáner\nde Aula", 
+            font=("Arial", 10, "bold"),
+            bg="#C09038", # Tono ocre/dorado
             fg="white", 
-            activebackground="#C0161C",
+            activebackground="#9E752A",
             activeforeground="white",
             command=self.abrir_escaner,
             image=self.img_boton2,
             compound=tk.TOP,
-            width=260,
-            height=150,
+            width=190,
+            height=140,
             bd=0,
             cursor="hand2"
         )
-        self.btn_2.pack(side="left", padx=15)
+        self.btn_2.pack(side="left", padx=8)
     
-        # ---- Logo de la Institución (Ruta adaptada a assets) ---- #
+        # Logo institucional inferior
         img_logo = Image.open("assets/PROA LOGO1.png")
-        img_logo = img_logo.resize((150, 160))
+        img_logo = img_logo.resize((130, 140))
         img_logo = ImageTk.PhotoImage(img_logo)
         self.lbl_logo = tk.Label(ventana, image=img_logo, bg=COLOR_FONDO)
-        self.lbl_logo.image = img_logo # Mantener referencia
-        self.lbl_logo.pack(pady=10)
+        self.lbl_logo.image = img_logo
+        self.lbl_logo.pack(pady=24)
 
-
+        # FRAME MARCO INFERIOR 
+        marco_inf=tk.Label(ventana, bg=COLOR_AZUL_PROA, width=920, height=50)
+        marco_inf.pack()
     def abrir_formulario(self):
         """Abre la ventana secundaria del formulario."""
         FormularioEstudiante(self.ventana)
@@ -476,6 +521,16 @@ class MenuPrincipal:
     def abrir_escaner(self):
         """Abre la ventana secundaria del escáner."""
         BuscadorAulaApp(self.ventana)
+
+    def exportar_excel(self):
+        """Función para exportar la base de datos a Excel / CSV."""
+        # TODO: Implementar la lógica con pandas o csv
+        messagebox.showinfo("Exportar", "Función de exportación a Excel / CSV en desarrollo.")
+
+    def ver_estudiantes(self):
+        """Función para abrir la vista de tabla con lista de estudiantes."""
+        # TODO: Implementar ventana de tabla (Treeview)
+        messagebox.showinfo("Ver Estudiantes", "Función de visualización y ordenamiento en desarrollo.")
 
 # --- Ejecución Principal ---
 if __name__ == "__main__":
