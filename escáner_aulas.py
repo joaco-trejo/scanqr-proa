@@ -109,6 +109,7 @@ class FormularioEstudiante(tk.Toplevel):
         self.title("Ingresar Nuevo Estudiante - Generar QR")
         self.geometry("560x700+100+0")
         self.configure(bg=COLOR_FONDO)
+        self.resizable(0,0)
         self.transient(parent) # Hace que esta ventana dependa de la principal
         self.iconbitmap("assets/PROAico.ico")
 
