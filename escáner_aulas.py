@@ -51,18 +51,50 @@ def guardar_estudiante_db(datos):
     """Guarda o actualiza un estudiante en la base de datos."""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+
     try:
-        cursor.execute('''
-            INSERT OR REPLACE INTO estudiantes 
-            (dni, nombre, apellido, localidad, colegio, curso, aula_asignada, fecha_registro, qr_path)
-            VALUES (:dni, :nombre, :apellido, :localidad, :colegio, :curso, :aula_asignada, :fecha_registro, :qr_path)
-        ''', datos)
-        conn.commit()
-        return True, "Estudiante guardado exitosamente."
+        cursor.execute(
+            "SELECT dni FROM estudiantes WHERE dni = ?",
+            (datos["dni"],)
+        )
+        existe = cursor.fetchone()
+
+        if existe:
+            confirmar = messagebox.askyesno(
+                "DNI existente",
+                f"El DNI {datos['dni']} ya está registrado.\n"
+                "¿Querés actualizar sus datos?"
+            )
+
+            if not confirmar:
+                return None, "Actualización cancelada."
+
+            cursor.execute("""
+                UPDATE estudiantes
+                SET nombre = :nombre,
+                    apellido = :apellido,
+                    localidad = :localidad,
+                    colegio = :colegio,
+                    curso = :curso,
+                    aula_asignada = :aula_asignada,
+                    fecha_registro = :fecha_registro,
+                    qr_path = :qr_path
+                WHERE dni = :dni
+            """, datos)
+
+        else:
+            cursor.execute('''
+                INSERT OR REPLACE INTO estudiantes 
+                (dni, nombre, apellido, localidad, colegio, curso, aula_asignada, fecha_registro, qr_path)
+                VALUES (:dni, :nombre, :apellido, :localidad, :colegio, :curso, :aula_asignada, :fecha_registro, :qr_path)
+            ''', datos)
+            conn.commit()
+            return True, "Estudiante guardado exitosamente."
+        
     except sqlite3.Error as e:
-        return False, f"Error al guardar: {e}"
+            return False, f"Error al guardar: {e}"
     finally:
-        conn.close()
+            conn.close()
 
 # --- Funciones de Generación de QR ---
 
@@ -228,6 +260,8 @@ class FormularioEstudiante(tk.Toplevel):
 
         # 4. Guardar en SQLite
         exito, msg = guardar_estudiante_db(datos_estudiante_db)
+        if exito is None:
+            return
         if exito:
             self.mostrar_previsualizacion_qr()
             self.btn_compartir.configure(state="normal")
