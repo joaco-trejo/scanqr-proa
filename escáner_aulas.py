@@ -383,8 +383,8 @@ class BuscadorAulaApp(tk.Toplevel):
         self.lbl_estudiante.configure(text="Esperando lectura...")
         self.lbl_aula.configure(
             text="AULA: Esperando...", 
-            bg=self.color_fondo_ventana_escaner, 
-            fg="#4a5568"
+            bg=COLOR_FONDO, 
+            fg=COLOR_TEXTO
         )
         self.btn_reiniciar.pack_forget()
 
