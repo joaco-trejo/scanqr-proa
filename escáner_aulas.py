@@ -259,15 +259,23 @@ class FormularioEstudiante(tk.Toplevel):
         }
 
         # 4. Guardar en SQLite
-        exito, msg = guardar_estudiante_db(datos_estudiante_db)
-        if exito is None:
+        resultado = guardar_estudiante_db(datos_estudiante_db)
+
+        if resultado is None:
             return
+
+        exito, msg = resultado
+
         if exito:
             self.mostrar_previsualizacion_qr()
             self.btn_compartir.configure(state="normal")
-            messagebox.showinfo("Éxito", f"Estudiante {nombre} guardado y QR generado.")
+            messagebox.showinfo(
+                "Éxito",
+                f"Estudiante {nombre} guardado y QR generado."
+            )
         else:
             messagebox.showerror("Error DB", msg)
+
 
     def mostrar_previsualizacion_qr(self):
         """Muestra el QR recién generado en la interfaz."""
