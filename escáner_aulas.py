@@ -23,6 +23,8 @@ COLOR_EXITO_BG = "#D4EDDA"
 COLOR_EXITO_FG = "#155724"
 COLOR_ERROR_BG = "#F8D7DA"
 COLOR_ERROR_FG = "#721C24"
+COLOR_AVISO_BG = "#FFF3CD"      # Advertencia (ej: QR con datos desactualizados)
+COLOR_AVISO_FG = "#856404"
 
 # --- Configuración de la Base de Datos SQLite ---
 DB_NAME = "examenes.db" # se guarda el nombre del archivo en una variable
@@ -31,6 +33,10 @@ QR_DIR = "qrcodes"      # carpeta donde se guardan las imágenes QR
 # Validación del DNI: solo dígitos, entre 7 y 8 (ajustar si hace falta)
 DNI_MIN_DIGITOS = 7
 DNI_MAX_DIGITOS = 8
+
+# Cámara del escáner
+INDICE_CAMARA = 0            # 0 = cámara por defecto de la computadora
+FALLOS_MAXIMOS_LECTURA = 60  # lecturas seguidas sin imagen antes de avisar (~1 segundo)
 
 def inicializar_base_de_datos():
     """Crea la tabla de estudiantes si no existe."""
@@ -58,6 +64,19 @@ def estudiante_existe(dni):
     try:
         cursor = conn.execute("SELECT 1 FROM estudiantes WHERE dni = ?", (dni,))
         return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+def buscar_estudiante_por_dni(dni):
+    """Devuelve un diccionario con los datos reales del estudiante, o None si no existe."""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row  # permite acceder a las columnas por nombre
+    try:
+        fila = conn.execute(
+            "SELECT dni, nombre, apellido, curso, aula_asignada FROM estudiantes WHERE dni = ?",
+            (dni,)
+        ).fetchone()
+        return dict(fila) if fila else None
     finally:
         conn.close()
 
@@ -146,8 +165,11 @@ def borrar_archivo_si_existe(ruta):
 def interpretar_qr(contenido_raw):
     """Interpreta el texto leído de un QR.
 
-    Devuelve (nombre_completo, dni, aula) si es un QR válido del sistema,
-    o None si no lo es (no es JSON, no es un objeto JSON o faltan dni/aula).
+    Devuelve {"dni": ..., "aula": ...} si el QR trae un DNI, o None si no es
+    un QR del sistema (no es JSON, no es un objeto JSON o no tiene "dni").
+
+    Los datos reales del estudiante (nombre y aula) se consultan en la base
+    de datos; el "aula" del QR solo se usa para detectar QR desactualizados.
     """
     try:
         datos = json.loads(contenido_raw)
@@ -157,13 +179,12 @@ def interpretar_qr(contenido_raw):
     if not isinstance(datos, dict):
         return None
 
-    dni = datos.get("dni")
-    aula = datos.get("aula")
-    if not dni or not aula:
+    dni = str(datos.get("dni") or "").strip()
+    if not dni:
         return None
 
-    nombre = datos.get("nombre_completo") or "Desconocido"
-    return str(nombre), str(dni), str(aula)
+    aula = str(datos.get("aula") or "").strip()
+    return {"dni": dni, "aula": aula}
 
 # --- Clases de la Interfaz Gráfica (GUI) ---
 
@@ -394,14 +415,35 @@ class BuscadorAulaApp(tk.Toplevel):
         self.lbl_titulo.pack(pady=15)
 
         # --- UI - Feed de cámara ---
-        self.lbl_video = tk.Label(frame_camara, bg="black", width=460, height=360)
+        # Imagen negra de 460x360: mantiene el tamaño del recuadro cuando no hay
+        # video y permite mostrar un mensaje de aviso encima.
+        self.img_placeholder = ImageTk.PhotoImage(Image.new("RGB", (460, 360), "black"))
+        self.lbl_video = tk.Label(
+            frame_camara,
+            image=self.img_placeholder,
+            text="",
+            compound="center",
+            font=("Arial", 13, "bold"),
+            fg="white",
+            bg="black",
+            width=460,
+            height=360
+        )
         self.lbl_video.pack()
 
         # --- UI - Resultado Detallado ---
         frame_resultados = tk.LabelFrame(self, text=" Datos Detectados ", font=("Arial", 11, "bold"), bg=COLOR_FONDO, pady=10, padx=10)
         frame_resultados.pack(pady=10, padx=20, fill="x")
 
-        self.lbl_estudiante = tk.Label(frame_resultados, text="Esperando lectura...", font=("Arial", 12), bg=COLOR_FONDO, anchor="w")
+        self.lbl_estudiante = tk.Label(
+            frame_resultados,
+            text="Esperando lectura...",
+            font=("Arial", 12),
+            bg=COLOR_FONDO,
+            anchor="w",
+            justify="left",
+            wraplength=600  # si el texto es largo, baja de línea en vez de cortarse
+        )
         self.lbl_estudiante.pack(fill="x")
 
         # Resultado principal del Aula (grande y claro)
@@ -418,10 +460,12 @@ class BuscadorAulaApp(tk.Toplevel):
         )
         self.lbl_aula.pack(pady=20)
 
-        # --- Lógica de la Cámara y QR ---
-        self.cap = cv2.VideoCapture(0)
+        # --- Estado de la cámara y del detector de QR ---
+        self.cap = None
+        self.ventana_bucle = None
+        self.fallos_lectura = 0
         self.detector = cv2.QRCodeDetector()
-        self.escaneo_activo = True
+        self.escaneo_activo = False  # se activa recién cuando la cámara abre bien
 
         self.btn_reiniciar = tk.Button(
             self, 
@@ -434,15 +478,85 @@ class BuscadorAulaApp(tk.Toplevel):
             pady=5
         )
 
-        self.actualizar_camara()
+        self.btn_reintentar_camara = tk.Button(
+            self,
+            text="Reintentar cámara",
+            font=("Arial", 12, "bold"),
+            bg=COLOR_AZUL_PROA,
+            fg="white",
+            command=self.iniciar_camara,
+            padx=10,
+            pady=5
+        )
 
         # Asegurar liberación de cámara si se cierra esta ventana con la X
         self.protocol("WM_DELETE_WINDOW", self.liberar_y_cerrar)
 
+        self.iniciar_camara()
+
+    # ------------------------------------------------------------------
+    # Cámara
+    # ------------------------------------------------------------------
+    def iniciar_camara(self):
+        """Abre la cámara. Si no se puede, avisa y ofrece reintentar."""
+        self.detener_camara()  # por si quedó una abierta (caso "Reintentar")
+        self.fallos_lectura = 0
+
+        self.cap = cv2.VideoCapture(INDICE_CAMARA)
+        if not self.cap.isOpened():
+            self.camara_no_disponible(
+                "No se detectó ninguna cámara.\n"
+                "Conectala y presioná «Reintentar cámara»."
+            )
+            return
+
+        # La cámara abrió bien: limpiar avisos y empezar a escanear
+        self.btn_reintentar_camara.pack_forget()
+        self.lbl_video.configure(text="")
+        self.reiniciar_escaneo()
+        self.actualizar_camara()
+
+    def detener_camara(self):
+        """Cancela el bucle de video y libera la cámara (es seguro llamarlo varias veces)."""
+        if self.ventana_bucle is not None:
+            self.after_cancel(self.ventana_bucle)
+            self.ventana_bucle = None
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
+
+    def camara_no_disponible(self, mensaje):
+        """Deja la ventana en estado 'sin cámara' con un aviso claro para el usuario."""
+        self.escaneo_activo = False
+        self.detener_camara()
+
+        self.lbl_video.configure(image=self.img_placeholder, text=mensaje)
+        self.lbl_video.imgtk = self.img_placeholder
+        self.lbl_estudiante.configure(text="Cámara no disponible.")
+        self.lbl_aula.configure(text="SIN CÁMARA", bg=COLOR_ERROR_BG, fg=COLOR_ERROR_FG)
+        self.btn_reiniciar.pack_forget()
+        self.btn_reintentar_camara.pack(pady=5)
+
+        messagebox.showwarning("Cámara no disponible", mensaje, parent=self)
+
     def actualizar_camara(self):
+        if self.cap is None:
+            return
+
         ret, frame = self.cap.read()
-        
-        if ret:
+
+        if not ret or frame is None:
+            # Sin imagen: si pasa muchas veces seguidas, la cámara se desconectó
+            self.fallos_lectura += 1
+            if self.fallos_lectura >= FALLOS_MAXIMOS_LECTURA:
+                self.camara_no_disponible(
+                    "Se perdió la señal de la cámara.\n"
+                    "Revisá la conexión y presioná «Reintentar cámara»."
+                )
+                return
+        else:
+            self.fallos_lectura = 0
+
             if self.escaneo_activo:
                 # data contendrá el string JSON si encuentra un QR
                 try:
@@ -462,33 +576,70 @@ class BuscadorAulaApp(tk.Toplevel):
         
         self.ventana_bucle = self.after(15, self.actualizar_camara)
 
+    # ------------------------------------------------------------------
+    # Resultado del escaneo
+    # ------------------------------------------------------------------
+    def mostrar_resultado(self, texto_estudiante, texto_aula, bg, fg):
+        """Muestra un resultado en pantalla y habilita escanear otro código."""
+        self.lbl_estudiante.configure(text=texto_estudiante)
+        self.lbl_aula.configure(text=texto_aula, bg=bg, fg=fg)
+        self.btn_reiniciar.pack(pady=5)
+
     def mostrar_resultado_estructurado(self, contenido_qr_raw):
         self.escaneo_activo = False
 
-        resultado = interpretar_qr(contenido_qr_raw)
+        # 1. ¿El QR tiene el formato esperado?
+        datos_qr = interpretar_qr(contenido_qr_raw)
+        if datos_qr is None:
+            self.mostrar_resultado(
+                "Resultado de Lectura: formato no reconocido.",
+                "CÓDIGO QR NO VÁLIDO",
+                COLOR_ERROR_BG, COLOR_ERROR_FG
+            )
+            return
 
-        if resultado is not None:
-            nombre_completo, dni, aula = resultado
+        dni = datos_qr["dni"]
+        dni_visible = dni if len(dni) <= 20 else dni[:20] + "…"
 
-            self.lbl_estudiante.configure(text=f"Estudiante: {nombre_completo} | DNI: {dni}")
+        # 2. Los datos reales se consultan en la base de datos (no se confía en el QR)
+        try:
+            estudiante = buscar_estudiante_por_dni(dni)
+        except sqlite3.Error as e:
+            self.mostrar_resultado(
+                f"No se pudo consultar la base de datos: {e}",
+                "ERROR DE BASE DE DATOS",
+                COLOR_ERROR_BG, COLOR_ERROR_FG
+            )
+            return
 
-            # CAMBIO: Aplicar variables globales de éxito
-            self.lbl_aula.configure(
-                text=f"AULA ASIGNADA: {aula}", 
-                bg=COLOR_EXITO_BG, 
-                fg=COLOR_EXITO_FG
+        # 3. DNI que no está registrado
+        if estudiante is None:
+            self.mostrar_resultado(
+                f"El DNI {dni_visible} no figura en la base de datos.",
+                "ESTUDIANTE NO REGISTRADO",
+                COLOR_ERROR_BG, COLOR_ERROR_FG
+            )
+            return
+
+        # 4. Estudiante registrado: mostrar el aula que figura HOY en la base
+        nombre_completo = f"{estudiante['nombre']} {estudiante['apellido']}"
+        aula_actual = estudiante["aula_asignada"]
+        texto_estudiante = f"Estudiante: {nombre_completo} | DNI: {estudiante['dni']}"
+
+        aula_qr = datos_qr["aula"]
+        if aula_qr and aula_qr != aula_actual:
+            # El QR es viejo: el aula cambió después de imprimirlo
+            self.mostrar_resultado(
+                texto_estudiante + f" | El QR indica aula {aula_qr} (desactualizado)",
+                f"AULA ASIGNADA: {aula_actual}",
+                COLOR_AVISO_BG, COLOR_AVISO_FG
             )
         else:
-            self.lbl_estudiante.configure(text="Resultado de Lectura: Formato no reconocido.")
-
-            # CAMBIO: Aplicar variables globales de error
-            self.lbl_aula.configure(
-                text="CÓDIGO QR NO VÁLIDO",
-                bg=COLOR_ERROR_BG, 
-                fg=COLOR_ERROR_FG
+            self.mostrar_resultado(
+                texto_estudiante,
+                f"AULA ASIGNADA: {aula_actual}",
+                COLOR_EXITO_BG, COLOR_EXITO_FG
             )
-
-        self.btn_reiniciar.pack(pady=5)
 
     def reiniciar_escaneo(self):
         self.escaneo_activo = True
@@ -502,9 +653,7 @@ class BuscadorAulaApp(tk.Toplevel):
 
     def liberar_y_cerrar(self):
         """Apaga la cámara y cierra solo esta ventana secundaria."""
-        if self.cap.isOpened():
-            self.cap.release()
-        self.after_cancel(self.ventana_bucle) # Cancelar el bucle after
+        self.detener_camara()
         self.destroy()
 
 # --- Ventana Principal (Menú) ---
