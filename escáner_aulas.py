@@ -26,6 +26,11 @@ COLOR_ERROR_FG = "#721C24"
 
 # --- Configuración de la Base de Datos SQLite ---
 DB_NAME = "examenes.db" # se guarda el nombre del archivo en una variable
+QR_DIR = "qrcodes"      # carpeta donde se guardan las imágenes QR
+
+# Validación del DNI: solo dígitos, entre 7 y 8 (ajustar si hace falta)
+DNI_MIN_DIGITOS = 7
+DNI_MAX_DIGITOS = 8
 
 def inicializar_base_de_datos():
     """Crea la tabla de estudiantes si no existe."""
@@ -47,54 +52,52 @@ def inicializar_base_de_datos():
     conn.commit()
     conn.close()
 
-def guardar_estudiante_db(datos):
-    """Guarda o actualiza un estudiante en la base de datos."""
+def estudiante_existe(dni):
+    """Devuelve True si ya hay un estudiante registrado con ese DNI."""
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
     try:
-        cursor.execute(
-            "SELECT dni FROM estudiantes WHERE dni = ?",
-            (datos["dni"],)
-        )
-        existe = cursor.fetchone()
+        cursor = conn.execute("SELECT 1 FROM estudiantes WHERE dni = ?", (dni,))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
 
-        if existe:
-            confirmar = messagebox.askyesno(
-                "DNI existente",
-                f"El DNI {datos['dni']} ya está registrado.\n"
-                "¿Querés actualizar sus datos?"
-            )
+def guardar_estudiante_db(datos, actualizar=False):
+    """Inserta un estudiante nuevo o, si actualizar=True, actualiza el existente.
 
-            if not confirmar:
-                return None, "Actualización cancelada."
+    No muestra ventanas: la decisión de sobrescribir la toma quien llama.
+    Devuelve (exito, mensaje). La transacción se confirma (commit) solo si
+    todo salió bien; ante cualquier error se revierte.
+    """
+    conn = sqlite3.connect(DB_NAME)
+    try:
+        with conn:  # commit automático si no hay error, rollback si lo hay
+            if actualizar:
+                conn.execute("""
+                    UPDATE estudiantes
+                    SET nombre = :nombre,
+                        apellido = :apellido,
+                        localidad = :localidad,
+                        colegio = :colegio,
+                        curso = :curso,
+                        aula_asignada = :aula_asignada,
+                        fecha_registro = :fecha_registro,
+                        qr_path = :qr_path
+                    WHERE dni = :dni
+                """, datos)
+                return True, "Estudiante actualizado exitosamente."
 
-            cursor.execute("""
-                UPDATE estudiantes
-                SET nombre = :nombre,
-                    apellido = :apellido,
-                    localidad = :localidad,
-                    colegio = :colegio,
-                    curso = :curso,
-                    aula_asignada = :aula_asignada,
-                    fecha_registro = :fecha_registro,
-                    qr_path = :qr_path
-                WHERE dni = :dni
-            """, datos)
-
-        else:
-            cursor.execute('''
-                INSERT OR REPLACE INTO estudiantes 
+            conn.execute("""
+                INSERT INTO estudiantes
                 (dni, nombre, apellido, localidad, colegio, curso, aula_asignada, fecha_registro, qr_path)
                 VALUES (:dni, :nombre, :apellido, :localidad, :colegio, :curso, :aula_asignada, :fecha_registro, :qr_path)
-            ''', datos)
-            conn.commit()
+            """, datos)
             return True, "Estudiante guardado exitosamente."
-        
+    except sqlite3.IntegrityError:
+        return False, f"El DNI {datos['dni']} ya está registrado."
     except sqlite3.Error as e:
-            return False, f"Error al guardar: {e}"
+        return False, f"Error al guardar: {e}"
     finally:
-            conn.close()
+        conn.close()
 
 # --- Funciones de Generación de QR ---
 
@@ -108,13 +111,16 @@ def generar_datos_qr_estructurados(nombre, apellido, dni, aula):
     }
     return json.dumps(datos) # Convertimos el diccionario a un string JSON
 
-def generar_y_guardar_imagen_qr(datos_qr_text, dni):
-    """Genera la imagen del QR y la guarda localmente."""
-    if not os.path.exists("qrcodes"):
-        os.makedirs("qrcodes")
-    
-    filename = f"qrcodes/qr_{dni}.png"
-    
+def ruta_qr_estudiante(dni):
+    """Ruta definitiva de la imagen QR de un estudiante."""
+    return f"{QR_DIR}/qr_{dni}.png"
+
+def generar_y_guardar_imagen_qr(datos_qr_text, ruta_destino):
+    """Genera la imagen del QR y la guarda en ruta_destino."""
+    carpeta = os.path.dirname(ruta_destino)
+    if carpeta:
+        os.makedirs(carpeta, exist_ok=True)
+
     # Configuración de la generación del QR
     qr = qrcode.QRCode(
         version=1,
@@ -126,9 +132,38 @@ def generar_y_guardar_imagen_qr(datos_qr_text, dni):
     qr.make(fit=True)
 
     img = qr.make_image(fill_color=COLOR_TEXTO, back_color="white")
-    img.save(filename)
-    
-    return filename
+    img.save(ruta_destino)
+
+    return ruta_destino
+
+def borrar_archivo_si_existe(ruta):
+    """Elimina un archivo temporal sin fallar si no está."""
+    try:
+        os.remove(ruta)
+    except OSError:
+        pass
+
+def interpretar_qr(contenido_raw):
+    """Interpreta el texto leído de un QR.
+
+    Devuelve (nombre_completo, dni, aula) si es un QR válido del sistema,
+    o None si no lo es (no es JSON, no es un objeto JSON o faltan dni/aula).
+    """
+    try:
+        datos = json.loads(contenido_raw)
+    except (ValueError, RecursionError):  # JSONDecodeError es un ValueError
+        return None
+
+    if not isinstance(datos, dict):
+        return None
+
+    dni = datos.get("dni")
+    aula = datos.get("aula")
+    if not dni or not aula:
+        return None
+
+    nombre = datos.get("nombre_completo") or "Desconocido"
+    return str(nombre), str(dni), str(aula)
 
 # --- Clases de la Interfaz Gráfica (GUI) ---
 
@@ -235,13 +270,40 @@ class FormularioEstudiante(tk.Toplevel):
             messagebox.showwarning("Faltan Datos", "Por favor completa DNI, Nombre, Apellido y Aula.")
             return
 
-        # 1. Generar el contenido estructurado del QR (JSON)
+        # Validación del formato del DNI (solo dígitos y largo esperado)
+        if not (dni.isascii() and dni.isdigit() and DNI_MIN_DIGITOS <= len(dni) <= DNI_MAX_DIGITOS):
+            messagebox.showwarning(
+                "DNI inválido",
+                f"El DNI debe contener solo números ({DNI_MIN_DIGITOS} u {DNI_MAX_DIGITOS} dígitos)."
+            )
+            return
+
+        # 1. Ver si el DNI ya existe y, en ese caso, pedir confirmación
+        #    ANTES de tocar cualquier archivo o dato.
+        try:
+            actualizar = estudiante_existe(dni)
+        except sqlite3.Error as e:
+            messagebox.showerror("Error DB", f"No se pudo consultar la base de datos: {e}")
+            return
+
+        if actualizar:
+            confirmar = messagebox.askyesno(
+                "DNI existente",
+                f"El DNI {dni} ya está registrado.\n"
+                "¿Querés actualizar sus datos?"
+            )
+            if not confirmar:
+                return  # No se modificó nada (ni base ni QR)
+
+        # 2. Generar el QR en un archivo temporal (no pisa el QR actual todavía)
+        ruta_final = ruta_qr_estudiante(dni)
+        ruta_temporal = f"{QR_DIR}/qr_{dni}.tmp.png"
         datos_qr_text = generar_datos_qr_estructurados(nombre, apellido, dni, aula)
 
-        # 2. Generar y guardar la imagen del QR
         try:
-            self.qr_generado_path = generar_y_guardar_imagen_qr(datos_qr_text, dni)
+            generar_y_guardar_imagen_qr(datos_qr_text, ruta_temporal)
         except Exception as e:
+            borrar_archivo_si_existe(ruta_temporal)
             messagebox.showerror("Error QR", f"No se pudo generar la imagen del QR: {e}")
             return
 
@@ -255,26 +317,33 @@ class FormularioEstudiante(tk.Toplevel):
             "curso": self.curso_entry.get().strip(),
             "aula_asignada": aula,
             "fecha_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "qr_path": self.qr_generado_path
+            "qr_path": ruta_final
         }
 
         # 4. Guardar en SQLite
-        resultado = guardar_estudiante_db(datos_estudiante_db)
+        exito, msg = guardar_estudiante_db(datos_estudiante_db, actualizar)
 
-        if resultado is None:
+        if not exito:
+            # Si falló la base, no queda ningún QR huérfano ni se pisa el anterior
+            borrar_archivo_si_existe(ruta_temporal)
+            messagebox.showerror("Error DB", msg)
             return
 
-        exito, msg = resultado
-
-        if exito:
-            self.mostrar_previsualizacion_qr()
-            self.btn_compartir.configure(state="normal")
-            messagebox.showinfo(
-                "Éxito",
-                f"Estudiante {nombre} guardado y QR generado."
+        # 5. La base ya está guardada: ahora sí reemplazamos el QR definitivo
+        try:
+            os.replace(ruta_temporal, ruta_final)
+        except OSError as e:
+            borrar_archivo_si_existe(ruta_temporal)
+            messagebox.showerror(
+                "Error QR",
+                f"El estudiante se guardó, pero no se pudo guardar la imagen del QR: {e}"
             )
-        else:
-            messagebox.showerror("Error DB", msg)
+            return
+
+        self.qr_generado_path = ruta_final
+        self.mostrar_previsualizacion_qr()
+        self.btn_compartir.configure(state="normal")
+        messagebox.showinfo("Éxito", f"{msg}\nQR generado para {nombre}.")
 
 
     def mostrar_previsualizacion_qr(self):
@@ -376,7 +445,10 @@ class BuscadorAulaApp(tk.Toplevel):
         if ret:
             if self.escaneo_activo:
                 # data contendrá el string JSON si encuentra un QR
-                data, bbox, _ = self.detector.detectAndDecode(frame)
+                try:
+                    data, bbox, _ = self.detector.detectAndDecode(frame)
+                except cv2.error:
+                    data = ""  # OpenCV puede fallar con algún fotograma: lo ignoramos
                 
                 if data:
                     self.mostrar_resultado_estructurado(data)
@@ -392,32 +464,30 @@ class BuscadorAulaApp(tk.Toplevel):
 
     def mostrar_resultado_estructurado(self, contenido_qr_raw):
         self.escaneo_activo = False
-        
-        try:
-            datos = json.loads(contenido_qr_raw)
-            nombre_completo = datos.get("nombre_completo", "Desconocido")
-            dni = datos.get("dni", "--")
-            aula = datos.get("aula", "NO ASIGNADA")
+
+        resultado = interpretar_qr(contenido_qr_raw)
+
+        if resultado is not None:
+            nombre_completo, dni, aula = resultado
 
             self.lbl_estudiante.configure(text=f"Estudiante: {nombre_completo} | DNI: {dni}")
-            
+
             # CAMBIO: Aplicar variables globales de éxito
             self.lbl_aula.configure(
                 text=f"AULA ASIGNADA: {aula}", 
                 bg=COLOR_EXITO_BG, 
                 fg=COLOR_EXITO_FG
             )
-            
-        except json.JSONDecodeError:
+        else:
             self.lbl_estudiante.configure(text="Resultado de Lectura: Formato no reconocido.")
-            
+
             # CAMBIO: Aplicar variables globales de error
             self.lbl_aula.configure(
                 text="CÓDIGO QR NO VÁLIDO",
                 bg=COLOR_ERROR_BG, 
                 fg=COLOR_ERROR_FG
             )
-        
+
         self.btn_reiniciar.pack(pady=5)
 
     def reiniciar_escaneo(self):
